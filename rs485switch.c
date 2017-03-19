@@ -55,8 +55,8 @@
 //      BAUD   DIP1    DIP2
 //      9600   OFF     OFF
 //     19200   OFF     ON
-//     38400   ON      OFF
-//     57600   ON      ON
+//     57600   ON      OFF
+//     115200  ON      ON
 //
 //   RA2  PIN 5   INPUT    RPI_TXM      Transmit signal from RPI Any change on the pi will enable transmit for 2ms
 //   RA3  PIN 4   INPUT    MCLR         Reset cpu when low (We will using LVP than RA3 can't be changed).
@@ -100,10 +100,11 @@
 // version 1.02  change baud for 9600,19200,57600,115200
 // RA1   RA0      BAUD        DELAY(us)   PRESCALER-DIVIDER   TIME OUT   
 // OFF   OFF     115200        174           4 (/32) 4us       44  
-// OFF    ON      38400        521           4 (/32) 8 us      130 
+// OFF    ON      57600        347           4 (/32) 4 us      86 
 //  ON   OFF      19200       1042           5 (/64) 8us       130             
 //  ON    ON       9600       2083           6 (/128) 16us     130       
 
+// version 1.03  put a delay of 10 sec on startup to get ridd of chip uart problem at start up
 
 
 #define T0_9600_PRESCALER 6
@@ -114,9 +115,9 @@
 #define T0_19200_TIME_OUT  (256-130)
 #define T0_19200_RCV_DELAY (256-65)
 
-#define T0_38400_PRESCALER 4
-#define T0_38400_TIME_OUT  (256-130)
-#define T0_38400_RCV_DELAY (256-65)
+#define T0_57600_PRESCALER 4
+#define T0_57600_TIME_OUT  (256-86)
+#define T0_57600_RCV_DELAY (256-44)
 
 #define T0_115200_PRESCALER 4
 #define T0_115200_TIME_OUT  (256-44)
@@ -126,18 +127,18 @@
                                      // 9600,19200,57600,115200
 const unsigned char BaudPrescaler[4]= { T0_9600_PRESCALER,\
                                         T0_19200_PRESCALER,\
-                                        T0_38400_PRESCALER,\
+                                        T0_57600_PRESCALER,\
                                         T0_115200_PRESCALER};
 
 const unsigned char BaudTimeOut[4]= {   T0_9600_TIME_OUT,\
                                         T0_19200_TIME_OUT,\
-                                        T0_38400_TIME_OUT,\
+                                        T0_57600_TIME_OUT,\
                                         T0_115200_TIME_OUT};
 
 
 const unsigned char BaudRcvDelay[4]= {  T0_9600_RCV_DELAY,\
                                         T0_19200_RCV_DELAY,\
-                                        T0_38400_RCV_DELAY,\
+                                        T0_57600_RCV_DELAY,\
                                         T0_115200_RCV_DELAY};
 
 
@@ -297,13 +298,23 @@ void ReadDipSwitch(void)
 
 void main(void) {
 
+unsigned char loop;
 // set default settings
 OSCCON		= 0b11110000;	// 32MHz
 OPTION_REG	= T0_9600_PRESCALER;	// pullups on, TMR0 @ Fosc/4, prescaler at 128
 ANSELA		= 0b00000000;	// no analog pins
-TRISA   	= 0b11001111;   // RA4 and RA5 output
-PORTA		= 0b00001111;	// output low
+TRISA   	= 0b11101111;   // RA4 output
+PORTA		= 0b00101111;	// output low except received  ENABLE
 WPUA		= 0b00111111;	// pull-up
+
+IN_ENABLE=1;  //disable IN enable for 5 seconds
+
+for(loop=0;loop<50;loop++)
+__delay_ms(100);
+
+TRISAbits.TRISA5=0;                //RA5 output
+
+IN_ENABLE=0;
 
 T0_Prescaler = T0_9600_PRESCALER;
 T0_TimeOut= T0_9600_TIME_OUT;
