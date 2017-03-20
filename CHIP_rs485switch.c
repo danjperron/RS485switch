@@ -47,14 +47,12 @@
 //   A delay of 0,5ms is added to remove glitch when transmit is switch back to receive mode
 //
 //   RA0  PIN 7   INPUT    DIP1      DIP SWITCH BAUD RATE SETTINGS
-//   RA1  PIN 6   INPUT    DIP2
 //
-//      BAUD   DIP1    DIP2
-//      9600   OFF     OFF
-//     19200   OFF     ON
-//     57600   ON      OFF
-//    115200   ON      ON
+//      BAUD   DIP1
+//     57600   OFF 
+//     115200  ON  
 //
+//   RA1  PIN 6   INPUT    BOOT ENABLE  Needs to toggle Low after 3 secs from boot to activate RS-485
 //   RA2  PIN 5   INPUT    RPI_TXM      Transmit signal from RPI Any change on the pi will enable transmit for 2ms
 //   RA3  PIN 4   INPUT    MCLR         Reset cpu when low (We will using LVP than RA3 can't be changed).
 //   RA4  PIN 3   OUTPUT   OUT_ENABLE   Turn high and stay until no more input activity for 2 ms
@@ -63,6 +61,7 @@
 #define RPI_TXM			RA2
 #define OUT_ENABLE		RA4
 #define IN_ENABLE		RA5
+#define BOOT_ENABLE     RA1
 
 
 
@@ -123,20 +122,14 @@
 
 
                                      // 9600,19200,57600,115200
-const unsigned char BaudPrescaler[4]= { T0_9600_PRESCALER,\
-                                        T0_19200_PRESCALER,\
-                                        T0_57600_PRESCALER,\
+const unsigned char BaudPrescaler[4]= { T0_57600_PRESCALER,\
                                         T0_115200_PRESCALER};
 
-const unsigned char BaudTimeOut[4]= {   T0_9600_TIME_OUT,\
-                                        T0_19200_TIME_OUT,\
-                                        T0_57600_TIME_OUT,\
+const unsigned char BaudTimeOut[4]= {   T0_57600_TIME_OUT,\
                                         T0_115200_TIME_OUT};
 
 
-const unsigned char BaudRcvDelay[4]= {  T0_9600_RCV_DELAY,\
-                                        T0_19200_RCV_DELAY,\
-                                        T0_57600_RCV_DELAY,\
+const unsigned char BaudRcvDelay[4]= {  T0_57600_RCV_DELAY,\
                                         T0_115200_RCV_DELAY};
 
 near volatile unsigned char T0_TimeOut;
@@ -268,7 +261,8 @@ void ReadDipSwitch(void)
     unsigned char idx;
     unsigned char temp;
 
-    idx = PORTA & 0x3;  // read dip switch (RA0 & RA1)
+    // only RA0
+    idx = PORTA & 0x1;  // read dip switch (RA0 & RA1)
 
 
 
@@ -299,24 +293,41 @@ void main(void) {
 unsigned char loop;
 // set default settings
 OSCCON		= 0b11110000;	// 32MHz
-OPTION_REG	= T0_9600_PRESCALER;	// pullups on, TMR0 @ Fosc/4, prescaler at 128
+OPTION_REG	= T0_57600_PRESCALER;	// pullups on, TMR0 @ Fosc/4, prescaler at 128
 ANSELA		= 0b00000000;	// no analog pins
-TRISA   	= 0b11001111;   // RA4 and RA5 output
-PORTA		= 0b00001111;	// output low except received  ENABLE
+TRISA   	= 0b11101111;   // RA4 output
+PORTA		= 0b00101111;	// output low except received  ENABLE
 WPUA		= 0b00111111;	// pull-up
 
+IN_ENABLE=1;  //disable IN_ENABLE for 10 seconds
 
-T0_Prescaler = T0_9600_PRESCALER;
-T0_TimeOut= T0_9600_TIME_OUT;
-T0_RcvDelay = T0_9600_RCV_DELAY;
+for(loop=0;loop<100;loop++)
+__delay_ms(100);
+
+// now we will wait for BOOT_ENABLE TO be 0
+
+while(1)
+{
+    if(BOOT_ENABLE==0)
+        break;
+}
+
+// ok let's activate the system
+
+TRISAbits.TRISA5=0;                //RA5 output
+
+IN_ENABLE=0;
+
+T0_Prescaler = T0_57600_PRESCALER;
+T0_TimeOut= T0_57600_TIME_OUT;
+T0_RcvDelay = T0_57600_RCV_DELAY;
 
 //  A/D & FVR OFF
 ADCON0=0;
 FVRCON=0;
 
 
-
-// ok interrupt. Enable RA2 interrupt on change. (up and down).
+// ok interrupt. Enable RA2 interrup on change. (up and down).
 // if IN_TXM toggle ,we are in transmit mode
 
 IOCAP = 0b00000100;   // enable positive edge on RA2
